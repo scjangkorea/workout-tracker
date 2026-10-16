@@ -1,0 +1,25 @@
+{
+  "name": "S24 Ultra 헬스 & 체중 프로 트래커",
+  "short_name": "헬스일지 Pro",
+  "description": "2024.03~ 매일의 몸무게와 19종 웨이트·유산소 운동 기록 및 다각도 통계 앱",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1120",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

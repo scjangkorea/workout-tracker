@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1120" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>헬스일지 Pro · Galaxy S24 Ultra</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --bg-deep: #070b14;
+      --bg-card: #111827;
+      --bg-card-elev: #1e293b;
+      --accent-emerald: #10b981;
+      --accent-cyan: #06b6d4;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at 50% 0%, #111d35 0%, #070b14 75%);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    /* Responsive S24 Ultra Container */
+    .s24-app-shell {
+      max-width: 460px;
+      margin: 0 auto;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      padding-bottom: 86px;
+    }
+    @media (min-width: 640px) {
+      body.frame-mode {
+        padding: 20px 0;
+        background: linear-gradient(135deg, #0b1325 0%, #050811 100%);
+      }
+      body.frame-mode .s24-app-shell {
+        max-width: 428px;
+        min-height: 890px;
+        border-radius: 26px;
+        border: 5px solid #475569;
+        box-shadow: 0 25px 70px rgba(0,0,0,0.75), 0 0 0 2px #1e293b;
+        background: #080d1a;
+        overflow: hidden;
+      }
+    }
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(16px);
+      background: rgba(8, 13, 26, 0.88);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      padding: 12px 16px;
+    }
+    .card-glass {
+      background: rgba(17, 24, 39, 0.86);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+    .weight-hero-card {
+      background: linear-gradient(145deg, rgba(16, 185, 129, 0.14) 0%, rgba(17, 24, 39, 0.92) 60%);
+      border: 1px solid rgba(16, 185, 129, 0.32);
+    }
+    .weight-big-input {
+      width: 124px;
+      font-size: 32px;
+      font-weight: 900;
+      color: #ffffff;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1.5px solid rgba(16, 185, 129, 0.45);
+      border-radius: 14px;
+      padding: 2px 10px;
+      text-align: center;
+      outline: none;
+    }
+    .w-step-btn {
+      padding: 10px 4px;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: #cbd5e1;
+      font-weight: 800;
+      font-size: 13px;
+      transition: transform 0.1s, background 0.15s;
+    }
+    .w-step-btn.plus {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.35);
+      color: #34d399;
+    }
+    .w-step-btn:active {
+      transform: scale(0.94);
+    }
+    .nav-arrow-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: #f8fafc;
+      font-size: 22px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .date-hidden-picker {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Timer Bar */
+    .timer-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #64748b;
+      display: inline-block;
+    }
+    .timer-dot.active {
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulseDot 1s infinite;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    .timer-chip {
+      padding: 5px 9px;
+      border-radius: 10px;
+      background: #1e293b;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      color: #e2e8f0;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .timer-chip.active-sw {
+      background: #f59e0b;
+      color: #090d16;
+      border-color: #f59e0b;
+    }
+    .timer-chip.save-sw {
+      background: #10b981;
+      color: #090d16;
+      border-color: #10b981;
+    }
+    .timer-chip.reset {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+    }
+
+    /* Condition Chips & Category Tabs */
+    .cond-chip {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(30, 41, 59, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .cond-chip.active {
+      background: #06b6d4;
+      color: #08101d;
+      border-color: #22d3ee;
+    }
+    .cat-tab {
+      padding: 8px 14px;
+      border-radius: 14px;
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .cat-tab.active {
+      background: #10b981;
+      color: #05120d;
+      border-color: #34d399;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Exercise Cards */
+    .ex-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 14px;
+      border-radius: 20px;
+      background: rgba(17, 24, 39, 0.88);
+      border: 1.5px solid rgba(148, 163, 184, 0.14);
+      transition: all 0.15s ease;
+    }
+    .ex-card.done {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(17, 24, 39, 0.92) 100%);
+      border-color: rgba(16, 185, 129, 0.5);
+    }
+    .ex-card.rest {
+      opacity: 0.72;
+      border-color: rgba(100, 116, 139, 0.25);
+    }
+    .ex-card.pain {
+      border-color: rgba(244, 63, 94, 0.45);
+      background: rgba(244, 63, 94, 0.08);
+    }
+    .ex-icon-big {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: rgba(30, 41, 59, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      flex-shrink: 0;
+    }
+    .ex-icon-big.done {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #10b981;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.25);
+    }
+    .part-badge {
+      font-size: 12px;
+      padding: 1px 7px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+    .part-badge.lower { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+    .part-badge.upper { background: rgba(6, 182, 212, 0.16); color: #67e8f9; }
+    .part-badge.cardio { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    .pr-mini-badge {
+      font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      font-weight: 700;
+    }
+    .ex-result-badge {
+      display: inline-block;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 2px 9px;
+      border-radius: 8px;
+    }
+    .ex-result-badge.done {
+      background: rgba(16, 185, 129, 0.22);
+      color: #34d399;
+    }
+    .ex-result-badge.rest {
+      background: rgba(100, 116, 139, 0.2);
+      color: #94a3b8;
+    }
+    .ex-result-badge.pain {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+    }
+    .ex-result-badge.skip {
+      background: rgba(234, 179, 8, 0.2);
+      color: #fde047;
+    }
+    .big-action-btn {
+      height: 44px;
+      padding: 0 13px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s;
+    }
+    .big-action-btn:active { transform: scale(0.94); }
+    .big-action-btn.o-btn {
+      background: #10b981;
+      color: #04130d;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    .big-action-btn.rest-btn {
+      background: rgba(30, 41, 59, 0.9);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 0 10px;
+    }
+    .big-action-btn.rest-btn.active {
+      background: rgba(100, 116, 139, 0.35);
+      color: #e2e8f0;
+    }
+    .big-action-btn.edit {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1.5px solid #10b981;
+      color: #34d399;
+    }
+
+    /* Bottom Navigation Bar */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 460px;
+      z-index: 40;
+      background: rgba(9, 14, 28, 0.95);
+      backdrop-filter: blur(18px);
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    .bottom-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 6px 4px;
+      border-radius: 14px;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 800;
+      transition: all 0.15s;
+    }
+    .bottom-nav-item .nav-ic {
+      font-size: 21px;
+      line-height: 1;
+    }
+    .bottom-nav-item.active {
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    /* Modal Bottom Sheet */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(2, 6, 23, 0.78);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-sheet {
+      width: 100%;
+      max-width: 460px;
+      background: #0f172a;
+      border-top: 1.5px solid rgba(16, 185, 129, 0.4);
+      border-radius: 28px 28px 0 0;
+      padding: 16px 18px 28px;
+      max-height: 88vh;
+      overflow-y: auto;
+      animation: slideUp 0.2s ease-out;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(60px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .ex-icon-box {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    .modal-set-box {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 16px;
+      padding: 12px;
+    }
+    .stepper-card {
+      background: #1e293b;
+      border-radius: 14px;
+      padding: 10px;
+    }
+    .step-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #f8fafc;
+      font-weight: 900;
+      font-size: 14px;
+    }
+    .step-btn:active { background: #10b981; color: #05120d; }
+    .tag-chip {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 8px;
+      background: #1e293b;
+      color: #94a3b8;
+      font-weight: 700;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .tag-chip.selected {
+      background: #06b6d4;
+      color: #06121e;
+      border-color: #22d3ee;
+    }
+    .freq-pill {
+      padding: 7px 12px;
+      border-radius: 11px;
+      background: #1e293b;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .freq-pill.active {
+      border-color: #10b981;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+    .status-quick-btn {
+      padding: 9px 4px;
+      border-radius: 11px;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .status-quick-btn.done { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .status-quick-btn.rest { background: rgba(100, 116, 139, 0.25); color: #cbd5e1; }
+    .status-quick-btn.skip { background: rgba(234, 179, 8, 0.2); color: #fde047; }
+    .status-quick-btn.pain { background: rgba(244, 63, 94, 0.2); color: #fda4af; }
+
+    /* Stats & Calendar Styles */
+    .subtab-btn {
+      padding: 9px 6px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #94a3b8;
+    }
+    .subtab-btn.active {
+      background: #10b981;
+      color: #05120d;
+    }
+    .range-btn {
+      padding: 5px 10px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #1e293b;
+      color: #94a3b8;
+    }
+    .range-btn.active {
+      background: #06b6d4;
+      color: #05121d;
+    }
+    .ex-select-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border-radius: 11px;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .ex-select-pill.active {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .cal-cell {
+      height: 54px;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+    }
+    .cal-cell.has-workout {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.28);
+    }
+    .cal-cell.selected {
+      border: 2px solid #10b981;
+      background: rgba(16, 185, 129, 0.24);
+    }
+    .cal-weight {
+      font-size: 12px;
+      font-weight: 700;
+      color: #38bdf8;
+      line-height: 1.1;
+    }
+    .cal-weight.empty { color: #475569; }
+    .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .dot.lower { background: #10b981; }
+    .dot.upper { background: #06b6d4; }
+    .dot.cardio { background: #f59e0b; }
+    .dot.pain { background: #f43f5e; }
+
+    /* Toast */
+    #toast-container {
+      position: fixed;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 80;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+      width: 90%;
+      max-width: 380px;
+    }
+    .toast-msg {
+      background: rgba(16, 185, 129, 0.95);
+      color: #04130d;
+      font-weight: 900;
+      font-size: 13px;
+      padding: 10px 16px;
+      border-radius: 14px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+      transition: opacity 0.3s;
+    }
+    .toast-msg.fade-out { opacity: 0; }
+  </style>
+</head>
+<body class="frame-mode">
+  <div id="toast-container"></div>
+
+  <div class="s24-app-shell">
+    <!-- Top App Bar -->
+    <header class="app-header flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-slate-950 font-black text-lg shadow">
+          💪
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <h1 class="text-base font-black tracking-tight text-white">헬스일지 Pro</h1>
+            <span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">S24 Ultra</span>
+          </div>
+          <p class="text-xs text-slate-400">2024.03 ~ 매일의 체중 & 18종 웨이트 기록</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="AppActions.goToday()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-extrabold border border-slate-700">
+          오늘로
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Dynamic View -->
+    <main id="app-main-content" class="px-3.5 pt-3.5 flex-1"></main>
+
+    <!-- Bottom Thumb-Friendly Navigation -->
+    <nav class="bottom-nav">
+      <button onclick="AppActions.setTab('log')" data-tab="log" class="bottom-nav-item active">
+        <span class="nav-ic">✍️</span>
+        <span>오늘 기록</span>
+      </button>
+      <button onclick="AppActions.setTab('stats')" data-tab="stats" class="bottom-nav-item">
+        <span class="nav-ic">📈</span>
+        <span>다각도 통계</span>
+      </button>
+      <button onclick="AppActions.setTab('calendar')" data-tab="calendar" class="bottom-nav-item">
+        <span class="nav-ic">🗓️</span>
+        <span>캘린더·잔디</span>
+      </button>
+      <button onclick="AppActions.setTab('settings')" data-tab="settings" class="bottom-nav-item">
+        <span class="nav-ic">📲</span>
+        <span>백업·설치</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Set Editor Bottom Sheet Modal -->
+  <div id="modal-container"></div>
+
+  <script src="./seed_data.js"></script>
+  <script src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
