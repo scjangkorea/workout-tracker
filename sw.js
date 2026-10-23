@@ -1,4 +1,4 @@
-const CACHE_NAME = 's24-workout-pro-v2';
+const CACHE_NAME = 's24-workout-pro-v3-20261023';
 const ASSETS = [
   './',
   './index.html',
@@ -11,8 +11,9 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
 });
 
@@ -24,16 +25,18 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Network-first with offline cache fallback so updates apply immediately when online
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((resp) => {
+    fetch(event.request)
+      .then((resp) => {
         if (resp && resp.status === 200) {
           const clone = resp.clone();
           caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
         }
         return resp;
-      }).catch(() => caches.match('./index.html'));
-    })
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
   );
 });

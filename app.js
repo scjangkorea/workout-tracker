@@ -30,30 +30,59 @@
 
   // Initialize Data
   function loadData() {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const savedV2 = localStorage.getItem(STORAGE_KEY);
+    const savedV1 = localStorage.getItem('s24_workout_tracker_data_v1');
+    const saved = savedV2 || savedV1;
     if (saved) {
       try {
         appData = JSON.parse(saved);
-        if (appData.exercises) {
-          appData.exercises = appData.exercises.filter((e) => e.id !== 'leg_curl' && e.name !== '무릎 구부리기');
+        // Also merge any dates recorded in V1 if both existed
+        if (savedV2 && savedV1) {
+          try {
+            const v1Obj = JSON.parse(savedV1);
+            if (v1Obj && v1Obj.days) {
+              for (const [d, val] of Object.entries(v1Obj.days)) {
+                if (!appData.days[d]) appData.days[d] = val;
+              }
+            }
+          } catch (e) {}
         }
-        // Ensure any new seed dates or exercises are merged if needed
+        // Always synchronize the 18 core exercises from seed (ensuring 무릎펴기(레그익스텐션) is present)
         if (window.INITIAL_WORKOUT_DATA) {
-          if (!appData.exercises || appData.exercises.length === 0) {
-            appData.exercises = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA.exercises));
-          }
+          const seedExercises = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA.exercises));
+          const seedIds = new Set(seedExercises.map((e) => e.id));
+          const customExercises = (appData.exercises || []).filter(
+            (e) => !seedIds.has(e.id) && e.id !== 'leg_curl' && e.name !== '무릎 구부리기'
+          );
+          appData.exercises = [...seedExercises, ...customExercises];
+
+          if (!appData.days) appData.days = {};
           for (const [d, val] of Object.entries(window.INITIAL_WORKOUT_DATA.days)) {
             if (!appData.days[d]) {
               appData.days[d] = JSON.parse(JSON.stringify(val));
+            } else {
+              if (!appData.days[d].r) appData.days[d].r = {};
+              if (val.r) {
+                for (const [exId, exRaw] of Object.entries(val.r)) {
+                  if (!appData.days[d].r[exId]) {
+                    appData.days[d].r[exId] = exRaw;
+                  }
+                }
+              }
+              if (appData.days[d].w === null || appData.days[d].w === undefined) {
+                appData.days[d].w = val.w;
+              }
             }
           }
         }
+        saveData();
       } catch (e) {
         console.error('Failed to parse saved data, using seed', e);
         appData = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA));
       }
     } else if (window.INITIAL_WORKOUT_DATA) {
       appData = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA));
+      saveData();
     } else {
       appData = { version: '1.0.0', defaultRepsPerSet: 10, exercises: [], days: {} };
     }
@@ -2213,6 +2242,12 @@
   window.addEventListener('DOMContentLoaded', () => {
     loadData();
     renderApp();
+    if (!localStorage.getItem('s24_leg_ext_restored_20261023')) {
+      localStorage.setItem('s24_leg_ext_restored_20261023', '1');
+      setTimeout(() => {
+        showToast('✓ 무릎펴기(레그익스텐션) 및 기존 919일 기록 복원 완료!');
+      }, 350);
+    }
     window.addEventListener('resize', () => {
       if (activeTab === 'stats') drawCharts();
     });

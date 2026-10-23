@@ -613,12 +613,21 @@
   <!-- Set Editor Bottom Sheet Modal -->
   <div id="modal-container"></div>
 
-  <script src="./seed_data.js"></script>
-  <script src="./app.js"></script>
+  <script src="./seed_data.js?v=20261023"></script>
+  <script src="./app.js?v=20261023"></script>
   <script>
     if ('serviceWorker' in navigator) {
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=20261023').then((reg) => {
+          try { reg.update(); } catch (e) {}
+        }).catch(() => {});
       });
     }
   </script>
