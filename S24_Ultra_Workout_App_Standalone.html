@@ -252,7 +252,7 @@
       border-radius: 6px;
       font-weight: 700;
     }
-    .part-badge.lower { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+    .part-badge.lower { background: rgba(99, 102, 241, 0.18); color: #a5b4fc; }
     .part-badge.upper { background: rgba(6, 182, 212, 0.16); color: #67e8f9; }
     .part-badge.cardio { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
     .pr-mini-badge {
@@ -299,9 +299,10 @@
     }
     .big-action-btn:active { transform: scale(0.94); }
     .big-action-btn.o-btn {
-      background: #10b981;
-      color: #04130d;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      background: rgba(30, 41, 59, 0.95);
+      color: #cbd5e1;
+      border: 1.5px dashed rgba(148, 163, 184, 0.45);
+      box-shadow: none;
     }
     .big-action-btn.rest-btn {
       background: rgba(30, 41, 59, 0.9);
@@ -314,9 +315,10 @@
       color: #e2e8f0;
     }
     .big-action-btn.edit {
-      background: rgba(16, 185, 129, 0.2);
-      border: 1.5px solid #10b981;
-      color: #34d399;
+      background: #10b981;
+      border: 1.5px solid #059669;
+      color: #04130d;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
     }
 
     /* Bottom Navigation Bar */
@@ -1987,7 +1989,7 @@ window.INITIAL_WORKOUT_DATA = {"version":"1.0.5","lastUpdated":"2026-10-24","def
           } else if (status === 'skip') {
             statusBadge = `<div class="ex-result-badge skip">✕ ${parsed.display}</div>`;
           } else {
-            statusBadge = `<div class="text-xs text-slate-400">직전 기록: <span class="text-slate-300 font-semibold">${preset}</span></div>`;
+            statusBadge = `<div class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[11px] font-bold">미입력</span><span class="text-xs text-slate-400">직전: <span class="text-slate-300 font-semibold">${preset}</span></span></div>`;
           }
 
           return `
@@ -2012,14 +2014,14 @@ window.INITIAL_WORKOUT_DATA = {"version":"1.0.5","lastUpdated":"2026-10-24","def
               <div class="flex items-center gap-1.5 shrink-0 ml-2">
                 ${status === 'done' ? `
                   <button onclick="AppActions.openExerciseModal('${ex.id}')" class="big-action-btn edit" title="세트 수정">
-                    세트수정
+                    ✓ 완료·수정
                   </button>
                 ` : `
                   <button onclick="AppActions.quickSetRest('${ex.id}')" class="big-action-btn rest-btn ${status === 'rest' ? 'active' : ''}" title="휴식 표시">
                     휴식
                   </button>
-                  <button onclick="AppActions.quickToggleDone('${ex.id}')" class="big-action-btn o-btn" title="최근 세트로 즉시 O 완료">
-                    O 완료
+                  <button onclick="AppActions.quickToggleDone('${ex.id}')" class="big-action-btn o-btn" title="클릭 시 직전 세트로 완료 입력">
+                    ○ 완료입력
                   </button>
                 `}
               </div>
@@ -2915,7 +2917,7 @@ window.INITIAL_WORKOUT_DATA = {"version":"1.0.5","lastUpdated":"2026-10-24","def
         }
       });
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261024c').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=20261024d').then((reg) => {
           try { reg.update(); } catch (e) {}
         }).catch(() => {});
       });

@@ -1367,7 +1367,7 @@
           } else if (status === 'skip') {
             statusBadge = `<div class="ex-result-badge skip">✕ ${parsed.display}</div>`;
           } else {
-            statusBadge = `<div class="text-xs text-slate-400">직전 기록: <span class="text-slate-300 font-semibold">${preset}</span></div>`;
+            statusBadge = `<div class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[11px] font-bold">미입력</span><span class="text-xs text-slate-400">직전: <span class="text-slate-300 font-semibold">${preset}</span></span></div>`;
           }
 
           return `
@@ -1392,14 +1392,14 @@
               <div class="flex items-center gap-1.5 shrink-0 ml-2">
                 ${status === 'done' ? `
                   <button onclick="AppActions.openExerciseModal('${ex.id}')" class="big-action-btn edit" title="세트 수정">
-                    세트수정
+                    ✓ 완료·수정
                   </button>
                 ` : `
                   <button onclick="AppActions.quickSetRest('${ex.id}')" class="big-action-btn rest-btn ${status === 'rest' ? 'active' : ''}" title="휴식 표시">
                     휴식
                   </button>
-                  <button onclick="AppActions.quickToggleDone('${ex.id}')" class="big-action-btn o-btn" title="최근 세트로 즉시 O 완료">
-                    O 완료
+                  <button onclick="AppActions.quickToggleDone('${ex.id}')" class="big-action-btn o-btn" title="클릭 시 직전 세트로 완료 입력">
+                    ○ 완료입력
                   </button>
                 `}
               </div>
