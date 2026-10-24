@@ -1,4 +1,4 @@
-const CACHE_NAME = 's24-workout-pro-v7-20261024d';
+const CACHE_NAME = 's24-workout-pro-v8-20261024e';
 const ASSETS = [
   './',
   './index.html',

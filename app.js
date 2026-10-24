@@ -9,7 +9,8 @@
   let selectedDate = '2026-10-16';
   let activeTab = 'log'; // 'log' | 'stats' | 'calendar' | 'settings'
   let activeCategory = 'all'; // 'all' | 'lower' | 'upper' | 'cardio' | 'done'
-  let activeStatsSubTab = 'weight'; // 'weight' | 'strength' | 'habit'
+  let activeStatsSubTab = 'weight'; // 'weight' | 'cardio' | 'strength' | 'habit'
+  let cardioFilter = 'all'; // 'all' | 'treadmill' | 'running'
   let weightRange = 'ALL'; // '1M' | '3M' | '6M' | '1Y' | 'ALL'
   let selectedExerciseId = 'chest_press';
   let calendarYear = 2026;
@@ -51,16 +52,24 @@
         if (window.INITIAL_WORKOUT_DATA) {
           const seedExercises = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA.exercises));
           const seedIds = new Set(seedExercises.map((e) => e.id));
-          // If user added a custom exercise for 레그프레스 / 다리로 밀기, migrate its logs into leg_press_machine
+          // If user added a custom exercise for 레그프레스 / 다리로 밀기 or 뛰기, migrate its logs
           const customLegPressIds = (appData.exercises || [])
             .filter((e) => !seedIds.has(e.id) && (e.name.includes('레그프레스') || e.name.includes('다리로 밀기')))
             .map((e) => e.id);
-          if (customLegPressIds.length > 0 && appData.days) {
+          const customRunningIds = (appData.exercises || [])
+            .filter((e) => !seedIds.has(e.id) && (e.name.includes('뛰기') || e.name.includes('러닝')))
+            .map((e) => e.id);
+          if ((customLegPressIds.length > 0 || customRunningIds.length > 0) && appData.days) {
             for (const dayVal of Object.values(appData.days)) {
               if (dayVal && dayVal.r) {
                 for (const cid of customLegPressIds) {
                   if (dayVal.r[cid] && !dayVal.r['leg_press_machine']) {
                     dayVal.r['leg_press_machine'] = dayVal.r[cid];
+                  }
+                }
+                for (const cid of customRunningIds) {
+                  if (dayVal.r[cid] && !dayVal.r['running']) {
+                    dayVal.r['running'] = dayVal.r[cid];
                   }
                 }
               }
@@ -71,7 +80,8 @@
               !seedIds.has(e.id) &&
               e.id !== 'leg_curl' &&
               e.name !== '무릎 구부리기' &&
-              !customLegPressIds.includes(e.id)
+              !customLegPressIds.includes(e.id) &&
+              !customRunningIds.includes(e.id)
           );
           appData.exercises = [...seedExercises, ...customExercises];
 
@@ -175,6 +185,59 @@
       if (s === 'O') return { status: 'done', sets: 1, raw: s, display: '완료 (O)' };
       if (s === '4가지') return { status: 'done', sets: 4, raw: s, display: '4가지 완료' };
       return { status: 'done', sets: 1, raw: s, display: s };
+    }
+
+    if (exType === 'cardio_dist') {
+      if (s === 'O') {
+        return { status: 'done', minutes: 0, distanceKm: 0, speedKmh: 0, sets: 1, raw: s, display: '완료 (O)' };
+      }
+      const innerStr = (s.startsWith('O(') && s.endsWith(')')) ? s.slice(2, -1).trim() : s;
+      let minutes = 0;
+      let distanceKm = 0;
+
+      const minMatch = innerStr.match(/(\d+(?:\.\d+)?)\s*분/);
+      const secMatch = innerStr.match(/(\d+)\s*초/);
+      const kmMatch = innerStr.match(/(\d+(?:\.\d+)?)\s*(?:km|킬로|k)/i);
+      const mMatch = !kmMatch ? innerStr.match(/(\d+(?:\.\d+)?)\s*m\b/i) : null;
+
+      if (minMatch || kmMatch || mMatch || secMatch) {
+        if (minMatch) minutes += parseFloat(minMatch[1]);
+        if (secMatch) minutes += Math.round((parseInt(secMatch[1], 10) / 60) * 10) / 10;
+        if (kmMatch) distanceKm = parseFloat(kmMatch[1]);
+        else if (mMatch) distanceKm = Math.round((parseFloat(mMatch[1]) / 1000) * 100) / 100;
+      } else {
+        const nums = (innerStr.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+        if (nums.length >= 2) {
+          minutes = nums[0];
+          distanceKm = nums[1];
+        } else if (nums.length === 1) {
+          if (innerStr.includes('.')) distanceKm = nums[0];
+          else minutes = nums[0];
+        }
+      }
+
+      minutes = Math.round(minutes * 10) / 10;
+      distanceKm = Math.round(distanceKm * 100) / 100;
+      const speedKmh = (minutes > 0 && distanceKm > 0)
+        ? Math.round((distanceKm / (minutes / 60)) * 10) / 10
+        : 0;
+
+      const dispParts = [];
+      if (minutes > 0) dispParts.push(`${minutes}분`);
+      if (distanceKm > 0) dispParts.push(`${distanceKm}km`);
+      const disp = dispParts.length > 0
+        ? `${dispParts.join(' · ')}${speedKmh ? ` (${speedKmh}km/h)` : ''}`
+        : innerStr;
+
+      return {
+        status: 'done',
+        minutes,
+        distanceKm,
+        speedKmh,
+        sets: 1,
+        raw: s,
+        display: disp
+      };
     }
 
     if (exType === 'stairs') {
@@ -364,6 +427,7 @@
     if (!ex) return 'O';
     const sortedDates = Object.keys(appData.days).sort();
     let latestRaw = null;
+    let latestDetailedCardio = null;
     for (let i = sortedDates.length - 1; i >= 0; i--) {
       const d = sortedDates[i];
       if (d > beforeDate) continue;
@@ -371,9 +435,17 @@
       if (!raw) continue;
       const parsed = parseWorkoutCell(raw, ex.type, ex.id);
       if (parsed && parsed.status === 'done') {
-        latestRaw = raw;
-        break;
+        if (!latestRaw) latestRaw = raw;
+        if (ex.type === 'cardio_dist' && (parsed.minutes > 0 || parsed.distanceKm > 0)) {
+          latestDetailedCardio = raw;
+          break;
+        }
+        if (ex.type !== 'cardio_dist') break;
       }
+    }
+    if (ex.type === 'cardio_dist') {
+      if (latestDetailedCardio) return latestDetailedCardio;
+      return exId === 'running' ? 'O(20분 3.0km)' : 'O(30분 2.5km)';
     }
     if (latestRaw) return latestRaw;
     if (ex.type === 'check') return 'O';
@@ -412,6 +484,12 @@
     let maxSec = 0;
     let doneDays = 0;
     let hasBodyweightDip = false;
+    let maxMinutes = 0;
+    let maxDistKm = 0;
+    let totalMinutes = 0;
+    let totalDistKm = 0;
+    let maxSpeedKmh = 0;
+    let recordedDistDays = 0;
     for (const d of Object.keys(appData.days)) {
       const raw = appData.days[d]?.r?.[exId];
       if (!raw) continue;
@@ -423,10 +501,19 @@
           if (p.maxWeight !== null && p.maxWeight > maxW) maxW = p.maxWeight;
         } else if (ex.type === 'time' && p.totalSec > maxSec) {
           maxSec = p.totalSec;
+        } else if (ex.type === 'cardio_dist') {
+          if (p.minutes > 0 || p.distanceKm > 0) recordedDistDays++;
+          if (p.minutes > maxMinutes) maxMinutes = p.minutes;
+          if (p.distanceKm > maxDistKm) maxDistKm = p.distanceKm;
+          if (p.speedKmh > maxSpeedKmh) maxSpeedKmh = p.speedKmh;
+          totalMinutes += p.minutes || 0;
+          totalDistKm += p.distanceKm || 0;
         }
       }
     }
-    return { maxW, maxSec, doneDays, hasBodyweightDip };
+    totalMinutes = Math.round(totalMinutes * 10) / 10;
+    totalDistKm = Math.round(totalDistKm * 100) / 100;
+    return { maxW, maxSec, doneDays, hasBodyweightDip, maxMinutes, maxDistKm, totalMinutes, totalDistKm, maxSpeedKmh, recordedDistDays };
   }
 
   // Format Date Korean
@@ -559,8 +646,8 @@
       const currentRaw = dayObj.r[exId];
       const parsed = currentRaw ? parseWorkoutCell(currentRaw, ex.type, ex.id) : null;
 
-      if (parsed && parsed.status === 'done') {
-        // Already done -> open modal to edit or clear
+      if ((parsed && parsed.status === 'done') || ex.type === 'cardio_dist') {
+        // Open modal to enter/edit time & distance or sets
         window.AppActions.openExerciseModal(exId);
       } else {
         // Fill with latest preset immediately!
@@ -645,6 +732,20 @@
         let count = 5;
         if (parsed && parsed.status === 'done' && parsed.count) count = parsed.count;
         modalState = { type: 'stairs', count };
+      } else if (ex.type === 'cardio_dist') {
+        let minutes = ex.id === 'running' ? 20 : 30;
+        let distanceKm = ex.id === 'running' ? 3.0 : 2.5;
+        if (parsed && parsed.status === 'done' && (parsed.minutes > 0 || parsed.distanceKm > 0)) {
+          minutes = parsed.minutes;
+          distanceKm = parsed.distanceKm;
+        } else {
+          const fallbackP = parseWorkoutCell(getLatestPresetForExercise(exId, selectedDate), ex.type, ex.id);
+          if (fallbackP && (fallbackP.minutes > 0 || fallbackP.distanceKm > 0)) {
+            minutes = fallbackP.minutes;
+            distanceKm = fallbackP.distanceKm;
+          }
+        }
+        modalState = { type: 'cardio_dist', minutes, distanceKm };
       } else {
         modalState = { type: 'check' };
       }
@@ -719,6 +820,47 @@
       modalState[field] = Math.max(1, (modalState[field] || 1) + delta);
       renderModal();
     },
+    modalAdjustCardioTime(delta) {
+      vibrate(10);
+      if (!modalState) return;
+      const minInput = document.getElementById('modal-cardio-min-input');
+      const distInput = document.getElementById('modal-cardio-dist-input');
+      if (minInput) modalState.minutes = parseFloat(minInput.value) || 0;
+      if (distInput) modalState.distanceKm = parseFloat(distInput.value) || 0;
+      modalState.minutes = Math.max(0, Math.round((modalState.minutes + delta) * 10) / 10);
+      renderModal();
+    },
+    modalSetCardioTime(val) {
+      vibrate(10);
+      if (!modalState) return;
+      const distInput = document.getElementById('modal-cardio-dist-input');
+      if (distInput) modalState.distanceKm = parseFloat(distInput.value) || 0;
+      modalState.minutes = Math.max(0, parseFloat(val) || 0);
+      renderModal();
+    },
+    modalAdjustCardioDist(delta) {
+      vibrate(10);
+      if (!modalState) return;
+      const minInput = document.getElementById('modal-cardio-min-input');
+      const distInput = document.getElementById('modal-cardio-dist-input');
+      if (minInput) modalState.minutes = parseFloat(minInput.value) || 0;
+      if (distInput) modalState.distanceKm = parseFloat(distInput.value) || 0;
+      modalState.distanceKm = Math.max(0, Math.round((modalState.distanceKm + delta) * 100) / 100);
+      renderModal();
+    },
+    modalSetCardioDist(val) {
+      vibrate(10);
+      if (!modalState) return;
+      const minInput = document.getElementById('modal-cardio-min-input');
+      if (minInput) modalState.minutes = parseFloat(minInput.value) || 0;
+      modalState.distanceKm = Math.max(0, parseFloat(val) || 0);
+      renderModal();
+    },
+    setCardioFilter(flt) {
+      vibrate(10);
+      cardioFilter = flt;
+      renderApp();
+    },
     modalSaveStructured() {
       vibrate(20);
       if (!editingExerciseId || !modalState) return;
@@ -741,6 +883,15 @@
         rawStr = `${modalState.reps} ${modalState.sets}`;
       } else if (modalState.type === 'stairs') {
         rawStr = String(modalState.count);
+      } else if (modalState.type === 'cardio_dist') {
+        const minInput = document.getElementById('modal-cardio-min-input');
+        const distInput = document.getElementById('modal-cardio-dist-input');
+        const mVal = minInput ? Math.max(0, Math.round((parseFloat(minInput.value) || 0) * 10) / 10) : modalState.minutes;
+        const dVal = distInput ? Math.max(0, Math.round((parseFloat(distInput.value) || 0) * 100) / 100) : modalState.distanceKm;
+        const parts = [];
+        if (mVal > 0) parts.push(`${mVal}분`);
+        if (dVal > 0) parts.push(`${dVal}km`);
+        rawStr = parts.length > 0 ? `O(${parts.join(' ')})` : 'O';
       }
 
       dayObj.r[editingExerciseId] = rawStr;
@@ -1137,6 +1288,75 @@
           </div>
         </div>
       `;
+    } else if (modalState.type === 'cardio_dist') {
+      const mVal = modalState.minutes || 0;
+      const dVal = modalState.distanceKm || 0;
+      const spd = (mVal > 0 && dVal > 0) ? (dVal / (mVal / 60)).toFixed(1) : null;
+      const paceMin = (mVal > 0 && dVal > 0) ? Math.floor(mVal / dVal) : null;
+      const paceSec = (mVal > 0 && dVal > 0) ? Math.round(((mVal / dVal) - paceMin) * 60) : null;
+      bodyHTML = `
+        <div class="space-y-3 mb-4">
+          <!-- Time (Minutes) Input -->
+          <div class="modal-set-box">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-cyan-400">⏱️ 운동 시간 (분)</span>
+              <span class="text-xs text-slate-400">버튼 조절 또는 숫자 직접 입력</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+              <button onclick="AppActions.modalAdjustCardioTime(-5)" class="step-btn">-5분</button>
+              <button onclick="AppActions.modalAdjustCardioTime(-1)" class="step-btn">-1분</button>
+              <div class="flex items-baseline justify-center gap-1 flex-1">
+                <input id="modal-cardio-min-input" type="number" step="1" min="0" value="${mVal}"
+                  onchange="AppActions.modalSetCardioTime(this.value)"
+                  class="w-20 text-center text-2xl font-black text-white bg-slate-900 border border-slate-700 rounded-xl py-1" />
+                <span class="text-sm font-bold text-slate-300">분</span>
+              </div>
+              <button onclick="AppActions.modalAdjustCardioTime(1)" class="step-btn">+1분</button>
+              <button onclick="AppActions.modalAdjustCardioTime(5)" class="step-btn">+5분</button>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              ${[10, 15, 20, 25, 30, 40, 50, 60].map((m) => `
+                <button onclick="AppActions.modalSetCardioTime(${m})" class="tag-chip ${mVal === m ? 'selected' : ''}">${m}분</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Distance (km) Input -->
+          <div class="modal-set-box">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-emerald-400">📍 이동 거리 (km)</span>
+              <span class="text-xs text-slate-400">소수점 입력 가능 (예: 2.5km)</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 mb-2.5">
+              <button onclick="AppActions.modalAdjustCardioDist(-0.5)" class="step-btn">-0.5</button>
+              <button onclick="AppActions.modalAdjustCardioDist(-0.1)" class="step-btn">-0.1</button>
+              <div class="flex items-baseline justify-center gap-1 flex-1">
+                <input id="modal-cardio-dist-input" type="number" step="0.1" min="0" value="${dVal}"
+                  onchange="AppActions.modalSetCardioDist(this.value)"
+                  class="w-24 text-center text-2xl font-black text-emerald-400 bg-slate-900 border border-slate-700 rounded-xl py-1" />
+                <span class="text-sm font-bold text-slate-300">km</span>
+              </div>
+              <button onclick="AppActions.modalAdjustCardioDist(0.1)" class="step-btn">+0.1</button>
+              <button onclick="AppActions.modalAdjustCardioDist(0.5)" class="step-btn">+0.5</button>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              ${[1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0].map((km) => `
+                <button onclick="AppActions.modalSetCardioDist(${km})" class="tag-chip ${dVal === km ? 'selected' : ''}">${km.toFixed(1)}km</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Auto Calculated Speed & Pace Banner -->
+          <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400">⚡ 자동 계산 속도 · 페이스</span>
+            ${spd ? `
+              <span class="font-extrabold text-cyan-300">평균 ${spd} km/h · 페이스 ${paceMin}'${String(paceSec).padStart(2, '0')}"/km</span>
+            ` : `
+              <span class="text-slate-500">시간과 거리를 입력하면 자동 계산됩니다</span>
+            `}
+          </div>
+        </div>
+      `;
     }
 
     container.innerHTML = `
@@ -1148,7 +1368,7 @@
               <div class="ex-icon-box">${ex.icon}</div>
               <div>
                 <h3 class="text-lg font-extrabold text-white leading-tight">${ex.name}</h3>
-                <p class="text-xs text-slate-400">${ex.part} · 누적 ${pr.doneDays}일 수행 ${pr.maxW ? `· 최고 PR ${pr.maxW}kg` : ''}</p>
+                <p class="text-xs text-slate-400">${ex.part} · 누적 ${pr.doneDays}일 수행 ${pr.maxW ? `· 최고 PR ${pr.maxW}kg` : (pr.maxDistKm ? `· 최고 ${pr.maxDistKm}km (${pr.maxMinutes}분)` : '')}</p>
               </div>
             </div>
             <button onclick="AppActions.closeModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 font-bold">✕</button>
@@ -1157,7 +1377,7 @@
           ${bodyHTML}
 
           <button onclick="AppActions.modalSaveStructured()" class="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-base shadow-lg shadow-emerald-500/25 mb-4">
-            ✓ 위 세트로 운동 완료 저장
+            ✓ ${modalState.type === 'cardio_dist' ? '위 시간·거리로 운동 완료 저장' : '위 세트로 운동 완료 저장'}
           </button>
 
           ${freqList.length > 0 ? `
@@ -1381,6 +1601,7 @@
                     <span class="font-extrabold text-base text-white truncate">${ex.name}</span>
                     <span class="part-badge ${ex.category}">${ex.part}</span>
                     ${pr.maxW ? `<span class="pr-mini-badge">PR ${pr.maxW}kg</span>` : ''}
+                    ${ex.type === 'cardio_dist' && (pr.maxDistKm > 0 || pr.maxMinutes > 0) ? `<span class="pr-mini-badge">최고 ${pr.maxDistKm}km·${pr.maxMinutes}분</span>` : ''}
                   </div>
                   <div class="mt-1">
                     ${statusBadge}
@@ -1398,8 +1619,8 @@
                   <button onclick="AppActions.quickSetRest('${ex.id}')" class="big-action-btn rest-btn ${status === 'rest' ? 'active' : ''}" title="휴식 표시">
                     휴식
                   </button>
-                  <button onclick="AppActions.quickToggleDone('${ex.id}')" class="big-action-btn o-btn" title="클릭 시 직전 세트로 완료 입력">
-                    ○ 완료입력
+                  <button onclick="AppActions.quickToggleDone('${ex.id}')" class="big-action-btn o-btn" title="${ex.type === 'cardio_dist' ? '시간 및 거리 입력' : '클릭 시 직전 세트로 완료 입력'}">
+                    ${ex.type === 'cardio_dist' ? '○ 시간·거리' : '○ 완료입력'}
                   </button>
                 `}
               </div>
@@ -1511,8 +1732,157 @@
           </div>
         </div>
       `;
+    } else if (activeStatsSubTab === 'cardio') {
+      const treadPR = getExercisePR('treadmill') || { doneDays: 0, totalMinutes: 0, totalDistKm: 0, maxMinutes: 0, maxDistKm: 0, maxSpeedKmh: 0, recordedDistDays: 0 };
+      const runPR = getExercisePR('running') || { doneDays: 0, totalMinutes: 0, totalDistKm: 0, maxMinutes: 0, maxDistKm: 0, maxSpeedKmh: 0, recordedDistDays: 0 };
+      const totalCardioMin = Math.round((treadPR.totalMinutes + runPR.totalMinutes) * 10) / 10;
+      const totalCardioKm = Math.round((treadPR.totalDistKm + runPR.totalDistKm) * 100) / 100;
+
+      // Gather detailed cardio sessions & monthly summary
+      const cardioSessions = [];
+      const monthlyCardio = {};
+      allDates.forEach((d) => {
+        const r = appData.days[d]?.r || {};
+        ['treadmill', 'running'].forEach((cid) => {
+          if (cardioFilter !== 'all' && cardioFilter !== cid) return;
+          const raw = r[cid];
+          if (!raw) return;
+          const p = parseWorkoutCell(raw, 'cardio_dist', cid);
+          if (p && p.status === 'done') {
+            const ym = d.slice(0, 7);
+            if (!monthlyCardio[ym]) {
+              monthlyCardio[ym] = { days: 0, minutes: 0, distKm: 0, treadDays: 0, runDays: 0 };
+            }
+            monthlyCardio[ym].days++;
+            monthlyCardio[ym].minutes = Math.round((monthlyCardio[ym].minutes + (p.minutes || 0)) * 10) / 10;
+            monthlyCardio[ym].distKm = Math.round((monthlyCardio[ym].distKm + (p.distanceKm || 0)) * 100) / 100;
+            if (cid === 'treadmill') monthlyCardio[ym].treadDays++;
+            else monthlyCardio[ym].runDays++;
+
+            if (p.minutes > 0 || p.distanceKm > 0) {
+              cardioSessions.push({
+                date: d,
+                id: cid,
+                name: cid === 'treadmill' ? '러닝머신 경사걷기' : '뛰기',
+                icon: cid === 'treadmill' ? '🏃' : '👟',
+                minutes: p.minutes,
+                distanceKm: p.distanceKm,
+                speedKmh: p.speedKmh,
+                display: p.display
+              });
+            }
+          }
+        });
+      });
+
+      const cardioMonths = Object.keys(monthlyCardio).sort().reverse();
+      const recentSessions = [...cardioSessions].reverse().slice(0, 20);
+
+      subContent = `
+        <!-- Cardio Comparison Cards: 러닝머신 경사걷기 vs 뛰기 -->
+        <div class="grid grid-cols-2 gap-2.5 mb-3.5">
+          <div class="card-glass p-3.5 border ${cardioFilter === 'treadmill' ? 'border-emerald-500/70' : 'border-slate-800'} cursor-pointer" onclick="AppActions.setCardioFilter(cardioFilter === 'treadmill' ? 'all' : 'treadmill')">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-extrabold text-emerald-400">🏃 러닝머신 경사걷기</span>
+              <span class="text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-bold">총 ${treadPR.doneDays}일</span>
+            </div>
+            <div class="text-lg font-black text-white">${treadPR.totalDistKm.toFixed(1)}<small class="text-xs font-normal text-slate-400"> km</small> · ${treadPR.totalMinutes}<small class="text-xs font-normal text-slate-400"> 분</small></div>
+            <div class="text-xs text-slate-400 mt-1">
+              최고 기록: <strong class="text-slate-200">${treadPR.maxDistKm || 0}km / ${treadPR.maxMinutes || 0}분</strong>
+            </div>
+          </div>
+
+          <div class="card-glass p-3.5 border ${cardioFilter === 'running' ? 'border-cyan-500/70' : 'border-slate-800'} cursor-pointer" onclick="AppActions.setCardioFilter(cardioFilter === 'running' ? 'all' : 'running')">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-extrabold text-cyan-400">👟 뛰기 (러닝)</span>
+              <span class="text-[11px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 font-bold">총 ${runPR.doneDays}일</span>
+            </div>
+            <div class="text-lg font-black text-white">${runPR.totalDistKm.toFixed(1)}<small class="text-xs font-normal text-slate-400"> km</small> · ${runPR.totalMinutes}<small class="text-xs font-normal text-slate-400"> 분</small></div>
+            <div class="text-xs text-slate-400 mt-1">
+              최고 기록: <strong class="text-slate-200">${runPR.maxDistKm || 0}km / ${runPR.maxMinutes || 0}분</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cardio Time & Distance Chart Card -->
+        <div class="card-glass p-4 mb-3.5">
+          <div class="flex items-center justify-between mb-2.5">
+            <div>
+              <h3 class="text-base font-extrabold text-white">🏃 유산소 시간(분) & 거리(km) 추이</h3>
+              <p class="text-xs text-slate-400">막대(시안): 운동 시간(분) · 꺾은선(초록): 이동 거리(km)</p>
+            </div>
+            <div class="text-right text-xs">
+              <span class="text-emerald-400 font-bold">합계 ${totalCardioKm.toFixed(1)}km</span>
+              <span class="text-slate-500"> / </span>
+              <span class="text-cyan-400 font-bold">${totalCardioMin}분</span>
+            </div>
+          </div>
+          <div class="flex gap-1.5 mb-3">
+            ${[
+              { id: 'all', label: '전체 합산 (걷기+뛰기)' },
+              { id: 'treadmill', label: '🏃 러닝머신 경사걷기' },
+              { id: 'running', label: '👟 뛰기' }
+            ].map((f) => `
+              <button onclick="AppActions.setCardioFilter('${f.id}')" class="range-btn ${cardioFilter === f.id ? 'active' : ''}">${f.label}</button>
+            `).join('')}
+          </div>
+          <div class="chart-box">
+            <canvas id="cardioChartCanvas" height="220"></canvas>
+          </div>
+        </div>
+
+        <!-- Recent Time & Distance Sessions List -->
+        <div class="card-glass p-4 mb-3.5">
+          <h3 class="text-base font-extrabold text-white mb-2.5">⏱️ 최근 시간·거리 상세 기록 (${cardioSessions.length}건)</h3>
+          ${recentSessions.length > 0 ? `
+            <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+              ${recentSessions.map((s) => `
+                <div class="p-2.5 rounded-xl bg-slate-900/75 border border-slate-800 flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <span class="text-lg">${s.icon}</span>
+                    <div>
+                      <div class="text-xs font-extrabold text-white">${s.date} · <span class="text-emerald-400">${s.name}</span></div>
+                      <div class="text-xs text-slate-400">${s.display}</div>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-black text-emerald-400">${s.distanceKm}km · ${s.minutes}분</div>
+                    ${s.speedKmh ? `<div class="text-[11px] text-cyan-400 font-bold">평균 ${s.speedKmh} km/h</div>` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : `
+            <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-400">
+              오늘 기록 탭에서 <strong class="text-emerald-400">러닝머신 경사걷기</strong> 또는 <strong class="text-cyan-400">뛰기</strong>의 시간(분)과 거리(km)를 입력하시면 이곳에 상세 기록과 속도(km/h)가 표시됩니다.
+            </div>
+          `}
+        </div>
+
+        <!-- Monthly Cardio Breakdown -->
+        <div class="card-glass p-4 mb-6">
+          <h3 class="text-base font-extrabold text-white mb-3">🗓️ 월별 유산소 수행일 · 누적 시간 · 거리 리포트</h3>
+          <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+            ${cardioMonths.map((ym) => {
+              const m = monthlyCardio[ym];
+              return `
+                <div class="p-2.5 rounded-xl bg-slate-900/70 border border-slate-800/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-extrabold text-slate-200">${ym}</span>
+                    <span class="text-slate-400 ml-1.5">(총 ${m.days}회 · 걷기 ${m.treadDays} / 뛰기 ${m.runDays})</span>
+                  </div>
+                  <div class="flex items-center gap-2.5">
+                    <span class="text-cyan-400 font-bold">${m.minutes}분</span>
+                    <span class="text-emerald-400 font-extrabold text-sm">${m.distKm.toFixed(1)}km</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
     } else if (activeStatsSubTab === 'strength') {
-      const selEx = appData.exercises.find((e) => e.id === selectedExerciseId) || appData.exercises[12];
+      const selEx = appData.exercises.find((e) => e.id === selectedExerciseId) || appData.exercises[0];
       const pr = getExercisePR(selEx.id);
       const est1RM = pr.maxW ? Math.round(pr.maxW * (1 + 10 / 30)) : 0;
 
@@ -1537,7 +1907,7 @@
               <div class="ex-icon-box">${selEx.icon}</div>
               <div>
                 <h3 class="text-base font-extrabold text-white">${selEx.name}</h3>
-                <p class="text-xs text-slate-400">${selEx.part} · 총 ${pr.doneDays}회(일) 수행</p>
+                <p class="text-xs text-slate-400">${selEx.part} · 총 ${pr.doneDays}회(일) 수행 ${selEx.type === 'cardio_dist' ? `· 누적 ${pr.totalDistKm}km / ${pr.totalMinutes}분` : ''}</p>
               </div>
             </div>
             <div class="text-right">
@@ -1547,6 +1917,9 @@
               ` : selEx.type === 'time' ? `
                 <div class="text-xs text-slate-400">1일 최장 시간</div>
                 <div class="text-base font-black text-emerald-400">총 ${pr.maxSec}초</div>
+              ` : selEx.type === 'cardio_dist' ? `
+                <div class="text-xs text-slate-400">최고 거리 / 최장 시간</div>
+                <div class="text-base font-black text-emerald-400">${pr.maxDistKm || 0}km <span class="text-xs text-cyan-400 font-bold">/ ${pr.maxMinutes || 0}분</span></div>
               ` : ''}
             </div>
           </div>
@@ -1555,9 +1928,9 @@
           </div>
         </div>
 
-        <!-- All 19 Exercises PR & Progression Table -->
+        <!-- All 20 Exercises PR & Progression Table -->
         <div class="card-glass p-4 mb-6">
-          <h3 class="text-base font-extrabold text-white mb-3">🏆 18개 전 종목 누적 수행일 & 최고 기록(PR) 요약</h3>
+          <h3 class="text-base font-extrabold text-white mb-3">🏆 ${appData.exercises.length}개 전 종목 누적 수행일 & 최고 기록(PR) 요약</h3>
           <div class="space-y-2">
             ${appData.exercises.map((ex) => {
               const pInfo = getExercisePR(ex.id);
@@ -1573,9 +1946,15 @@
                   </div>
                   <div class="text-right shrink-0 ml-2">
                     <div class="text-sm font-extrabold text-emerald-400">
-                      ${ex.id === 'dipping' && pInfo.hasBodyweightDip ? '무부하 달성' : (pInfo.maxW ? `PR ${pInfo.maxW}kg` : (pInfo.maxSec ? `최고 ${pInfo.maxSec}초` : '꾸준함'))}
+                      ${ex.id === 'dipping' && pInfo.hasBodyweightDip
+                        ? '무부하 달성'
+                        : (pInfo.maxW
+                            ? `PR ${pInfo.maxW}kg`
+                            : (ex.type === 'cardio_dist'
+                                ? (pInfo.maxDistKm || pInfo.maxMinutes ? `최고 ${pInfo.maxDistKm}km · ${pInfo.maxMinutes}분` : `누적 ${pInfo.doneDays}일`)
+                                : (pInfo.maxSec ? `최고 ${pInfo.maxSec}초` : '꾸준함')))}
                     </div>
-                    <div class="text-xs text-slate-400">총 ${pInfo.doneDays}일 수행</div>
+                    <div class="text-xs text-slate-400">총 ${pInfo.doneDays}일 수행${ex.type === 'cardio_dist' && pInfo.totalDistKm ? ` · 총 ${pInfo.totalDistKm}km` : ''}</div>
                   </div>
                 </div>
               `;
@@ -1725,10 +2104,11 @@
       </div>
 
       <!-- Sub-navigation for Stats -->
-      <div class="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-3.5">
-        <button onclick="AppActions.setStatsSubTab('weight')" class="subtab-btn ${activeStatsSubTab === 'weight' ? 'active' : ''}">⚖️ 체중 추이</button>
-        <button onclick="AppActions.setStatsSubTab('strength')" class="subtab-btn ${activeStatsSubTab === 'strength' ? 'active' : ''}">🏋️ 종목별 성장</button>
-        <button onclick="AppActions.setStatsSubTab('habit')" class="subtab-btn ${activeStatsSubTab === 'habit' ? 'active' : ''}">📊 부위·습관</button>
+      <div class="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-3.5">
+        <button onclick="AppActions.setStatsSubTab('weight')" class="subtab-btn ${activeStatsSubTab === 'weight' ? 'active' : ''}">⚖️ 체중</button>
+        <button onclick="AppActions.setStatsSubTab('cardio')" class="subtab-btn ${activeStatsSubTab === 'cardio' ? 'active' : ''}">🏃 유산소</button>
+        <button onclick="AppActions.setStatsSubTab('strength')" class="subtab-btn ${activeStatsSubTab === 'strength' ? 'active' : ''}">🏋️ 종목별</button>
+        <button onclick="AppActions.setStatsSubTab('habit')" class="subtab-btn ${activeStatsSubTab === 'habit' ? 'active' : ''}">📊 습관</button>
       </div>
 
       ${subContent}
@@ -1981,6 +2361,7 @@
             </select>
             <select id="new-ex-type" class="px-2.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs">
               <option value="weight">무게(kg) × 횟수</option>
+              <option value="cardio_dist">시간(분) · 거리(km)</option>
               <option value="reps">반복횟수 × 세트</option>
               <option value="time">시간(초) 기록</option>
               <option value="check">O/X 완료 체크</option>
@@ -2099,6 +2480,132 @@
       ctx.fillText(filtered[filtered.length - 1].d.slice(2), width - padR - 46, height - 6);
     }
 
+    if (activeStatsSubTab === 'cardio') {
+      const canvas = document.getElementById('cardioChartCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const width = rect.width || 340;
+      const height = 210;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.scale(dpr, dpr);
+
+      const pts = [];
+      Object.keys(appData.days).sort().forEach((d) => {
+        const r = appData.days[d]?.r || {};
+        let dayMin = 0;
+        let dayKm = 0;
+        ['treadmill', 'running'].forEach((cid) => {
+          if (cardioFilter !== 'all' && cardioFilter !== cid) return;
+          const raw = r[cid];
+          if (!raw) return;
+          const p = parseWorkoutCell(raw, 'cardio_dist', cid);
+          if (p && p.status === 'done') {
+            dayMin += p.minutes || 0;
+            dayKm += p.distanceKm || 0;
+          }
+        });
+        if (dayMin > 0 || dayKm > 0) {
+          pts.push({ d, min: Math.round(dayMin * 10) / 10, km: Math.round(dayKm * 100) / 100 });
+        }
+      });
+
+      const padL = 34, padR = 34, padT = 22, padB = 26;
+      const plotW = width - padL - padR;
+      const plotH = height - padT - padB;
+
+      if (pts.length >= 1) {
+        const maxMin = Math.max(30, ...pts.map((x) => x.min)) * 1.15;
+        const maxKm = Math.max(3.0, ...pts.map((x) => x.km)) * 1.15;
+
+        // Grid & dual axis labels (Left: 분, Right: km)
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+        ctx.font = '10px sans-serif';
+        for (let i = 0; i <= 4; i++) {
+          const y = padT + (plotH * i) / 4;
+          const vMin = Math.round((maxMin * (4 - i)) / 4);
+          const vKm = ((maxKm * (4 - i)) / 4).toFixed(1);
+          ctx.beginPath();
+          ctx.moveTo(padL, y);
+          ctx.lineTo(width - padR, y);
+          ctx.stroke();
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillText(`${vMin}분`, 2, y + 3);
+          ctx.fillStyle = '#34d399';
+          ctx.fillText(`${vKm}k`, width - padR + 4, y + 3);
+        }
+
+        // Bars for Minutes (Cyan)
+        const barW = Math.min(24, Math.max(6, plotW / (pts.length * 1.8)));
+        pts.forEach((pt, idx) => {
+          const x = pts.length === 1 ? padL + plotW / 2 : padL + (idx / (pts.length - 1)) * plotW;
+          const bh = (pt.min / maxMin) * plotH;
+          const y = padT + plotH - bh;
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.38)';
+          ctx.fillRect(x - barW / 2, y, barW, bh);
+        });
+
+        // Line & Dots for Distance km (Emerald)
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        pts.forEach((pt, idx) => {
+          const x = pts.length === 1 ? padL + plotW / 2 : padL + (idx / (pts.length - 1)) * plotW;
+          const y = padT + plotH - (pt.km / maxKm) * plotH;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        pts.forEach((pt, idx) => {
+          const x = pts.length === 1 ? padL + plotW / 2 : padL + (idx / (pts.length - 1)) * plotW;
+          const y = padT + plotH - (pt.km / maxKm) * plotH;
+          ctx.fillStyle = '#34d399';
+          ctx.beginPath();
+          ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(pts[0].d.slice(2), padL, height - 6);
+        if (pts.length > 1) {
+          ctx.fillText(pts[pts.length - 1].d.slice(2), width - padR - 44, height - 6);
+        }
+      } else {
+        // Fallback: show monthly cardio execution count + guide banner
+        const mCounts = {};
+        Object.keys(appData.days).sort().forEach((d) => {
+          const ym = d.slice(0, 7);
+          if (!mCounts[ym]) mCounts[ym] = 0;
+          const r = appData.days[d]?.r || {};
+          ['treadmill', 'running'].forEach((cid) => {
+            if (cardioFilter !== 'all' && cardioFilter !== cid) return;
+            if (parseWorkoutCell(r[cid], 'cardio_dist', cid)?.status === 'done') mCounts[ym]++;
+          });
+        });
+        const keys = Object.keys(mCounts).sort();
+        const barW = Math.max(4, plotW / (keys.length || 1) - 3);
+        keys.forEach((ym, idx) => {
+          const cnt = mCounts[ym];
+          const x = padL + (idx / (keys.length || 1)) * plotW;
+          const bh = (cnt / 31) * plotH;
+          const y = padT + plotH - bh;
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.5)';
+          ctx.fillRect(x, y, barW, bh);
+        });
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText('시간(분)·거리(km) 입력 시 일별 시간·거리 복합 그래프가 표시됩니다', padL, padT + 14);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('(현재 배경 막대: 기존 월별 러닝머신 수행 일수)', padL, padT + 30);
+      }
+    }
+
     if (activeStatsSubTab === 'strength') {
       const canvas = document.getElementById('strengthChartCanvas');
       if (!canvas) return;
@@ -2113,7 +2620,65 @@
       canvas.style.height = height + 'px';
       ctx.scale(dpr, dpr);
 
-      const ex = appData.exercises.find((e) => e.id === selectedExerciseId) || appData.exercises[12];
+      const ex = appData.exercises.find((e) => e.id === selectedExerciseId) || appData.exercises[0];
+      if (ex.type === 'cardio_dist') {
+        const cPts = [];
+        Object.keys(appData.days).sort().forEach((d) => {
+          const raw = appData.days[d]?.r?.[ex.id];
+          if (!raw) return;
+          const p = parseWorkoutCell(raw, ex.type, ex.id);
+          if (p && p.status === 'done' && (p.minutes > 0 || p.distanceKm > 0)) {
+            cPts.push({ d, min: p.minutes || 0, km: p.distanceKm || 0 });
+          }
+        });
+        const padL = 34, padR = 34, padT = 20, padB = 26;
+        const plotW = width - padL - padR;
+        const plotH = height - padT - padB;
+        if (cPts.length >= 1) {
+          const maxMin = Math.max(30, ...cPts.map((x) => x.min)) * 1.15;
+          const maxKm = Math.max(3.0, ...cPts.map((x) => x.km)) * 1.15;
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+          ctx.font = '10px sans-serif';
+          for (let i = 0; i <= 4; i++) {
+            const y = padT + (plotH * i) / 4;
+            ctx.beginPath();
+            ctx.moveTo(padL, y);
+            ctx.lineTo(width - padR, y);
+            ctx.stroke();
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(`${Math.round((maxMin * (4 - i)) / 4)}분`, 2, y + 3);
+            ctx.fillStyle = '#34d399';
+            ctx.fillText(`${((maxKm * (4 - i)) / 4).toFixed(1)}k`, width - padR + 4, y + 3);
+          }
+          const barW = Math.min(24, Math.max(6, plotW / (cPts.length * 1.8)));
+          cPts.forEach((pt, idx) => {
+            const x = cPts.length === 1 ? padL + plotW / 2 : padL + (idx / (cPts.length - 1)) * plotW;
+            const bh = (pt.min / maxMin) * plotH;
+            ctx.fillStyle = 'rgba(6, 182, 212, 0.38)';
+            ctx.fillRect(x - barW / 2, padT + plotH - bh, barW, bh);
+          });
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          cPts.forEach((pt, idx) => {
+            const x = cPts.length === 1 ? padL + plotW / 2 : padL + (idx / (cPts.length - 1)) * plotW;
+            const y = padT + plotH - (pt.km / maxKm) * plotH;
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          cPts.forEach((pt, idx) => {
+            const x = cPts.length === 1 ? padL + plotW / 2 : padL + (idx / (cPts.length - 1)) * plotW;
+            const y = padT + plotH - (pt.km / maxKm) * plotH;
+            ctx.fillStyle = '#34d399';
+            ctx.beginPath();
+            ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          return;
+        }
+      }
+
       const pts = [];
       Object.keys(appData.days).sort().forEach((d) => {
         const raw = appData.days[d]?.r?.[ex.id];
@@ -2272,10 +2837,10 @@
   window.addEventListener('DOMContentLoaded', () => {
     loadData();
     renderApp();
-    if (!localStorage.getItem('s24_leg_press_tsv_toast_20261024c')) {
-      localStorage.setItem('s24_leg_press_tsv_toast_20261024c', '1');
+    if (!localStorage.getItem('s24_cardio_running_added_20261024e')) {
+      localStorage.setItem('s24_cardio_running_added_20261024e', '1');
       setTimeout(() => {
-        showToast('✓ 다리로 밀기(레그프레스) 920일 전체 데이터 업데이트 완료!');
+        showToast('✓ 러닝머신 경사걷기 & 뛰기 시간·거리 기능 반영 완료!');
       }, 350);
     }
     window.addEventListener('resize', () => {
