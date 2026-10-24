@@ -613,8 +613,8 @@
   <!-- Set Editor Bottom Sheet Modal -->
   <div id="modal-container"></div>
 
-  <script src="./seed_data.js?v=20261024"></script>
-  <script src="./app.js?v=20261024"></script>
+  <script src="./seed_data.js?v=20261024b"></script>
+  <script src="./app.js?v=20261024b"></script>
   <script>
     if ('serviceWorker' in navigator) {
       let refreshing = false;
@@ -625,7 +625,7 @@
         }
       });
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20261024').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=20261024b').then((reg) => {
           try { reg.update(); } catch (e) {}
         }).catch(() => {});
       });

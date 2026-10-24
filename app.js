@@ -51,7 +51,7 @@
         if (window.INITIAL_WORKOUT_DATA) {
           const seedExercises = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA.exercises));
           const seedIds = new Set(seedExercises.map((e) => e.id));
-          // If user added a custom exercise for 레그프레스 / 다리로 밀기, migrate its logs into leg_press
+          // If user added a custom exercise for 레그프레스 / 다리로 밀기, migrate its logs into leg_press_machine
           const customLegPressIds = (appData.exercises || [])
             .filter((e) => !seedIds.has(e.id) && (e.name.includes('레그프레스') || e.name.includes('다리로 밀기')))
             .map((e) => e.id);
@@ -59,8 +59,8 @@
             for (const dayVal of Object.values(appData.days)) {
               if (dayVal && dayVal.r) {
                 for (const cid of customLegPressIds) {
-                  if (dayVal.r[cid] && !dayVal.r['leg_press']) {
-                    dayVal.r['leg_press'] = dayVal.r[cid];
+                  if (dayVal.r[cid] && !dayVal.r['leg_press_machine']) {
+                    dayVal.r['leg_press_machine'] = dayVal.r[cid];
                   }
                 }
               }
@@ -1326,9 +1326,9 @@
       <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar mb-3">
         ${[
           { id: 'all', label: `전체 (${appData.exercises.length})` },
-          { id: 'lower', label: '🦵 하체 (6)' },
-          { id: 'upper', label: '💪 상체 (8)' },
-          { id: 'cardio', label: '🏃 유산소·일상 (4)' },
+          { id: 'lower', label: `🦵 하체 (${appData.exercises.filter((e) => e.category === 'lower').length})` },
+          { id: 'upper', label: `💪 상체 (${appData.exercises.filter((e) => e.category === 'upper').length})` },
+          { id: 'cardio', label: `🏃 유산소·일상 (${appData.exercises.filter((e) => e.category === 'cardio').length})` },
           { id: 'done', label: `✓ 완료 (${doneCount})` }
         ].map((c) => `
           <button onclick="AppActions.setCategory('${c.id}')" class="cat-tab ${activeCategory === c.id ? 'active' : ''}">
@@ -2261,10 +2261,10 @@
   window.addEventListener('DOMContentLoaded', () => {
     loadData();
     renderApp();
-    if (!localStorage.getItem('s24_leg_press_restored_20261024')) {
-      localStorage.setItem('s24_leg_press_restored_20261024', '1');
+    if (!localStorage.getItem('s24_both_press_restored_20261024b')) {
+      localStorage.setItem('s24_both_press_restored_20261024b', '1');
       setTimeout(() => {
-        showToast('✓ 다리로 밀기(레그프레스) 및 기존 805일 기록 복원 완료!');
+        showToast('✓ 누워서 밀기 & 다리로 밀기(레그프레스) 모두 반영 완료!');
       }, 350);
     }
     window.addEventListener('resize', () => {
