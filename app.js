@@ -51,8 +51,27 @@
         if (window.INITIAL_WORKOUT_DATA) {
           const seedExercises = JSON.parse(JSON.stringify(window.INITIAL_WORKOUT_DATA.exercises));
           const seedIds = new Set(seedExercises.map((e) => e.id));
+          // If user added a custom exercise for 레그프레스 / 다리로 밀기, migrate its logs into leg_press
+          const customLegPressIds = (appData.exercises || [])
+            .filter((e) => !seedIds.has(e.id) && (e.name.includes('레그프레스') || e.name.includes('다리로 밀기')))
+            .map((e) => e.id);
+          if (customLegPressIds.length > 0 && appData.days) {
+            for (const dayVal of Object.values(appData.days)) {
+              if (dayVal && dayVal.r) {
+                for (const cid of customLegPressIds) {
+                  if (dayVal.r[cid] && !dayVal.r['leg_press']) {
+                    dayVal.r['leg_press'] = dayVal.r[cid];
+                  }
+                }
+              }
+            }
+          }
           const customExercises = (appData.exercises || []).filter(
-            (e) => !seedIds.has(e.id) && e.id !== 'leg_curl' && e.name !== '무릎 구부리기'
+            (e) =>
+              !seedIds.has(e.id) &&
+              e.id !== 'leg_curl' &&
+              e.name !== '무릎 구부리기' &&
+              !customLegPressIds.includes(e.id)
           );
           appData.exercises = [...seedExercises, ...customExercises];
 
@@ -2242,10 +2261,10 @@
   window.addEventListener('DOMContentLoaded', () => {
     loadData();
     renderApp();
-    if (!localStorage.getItem('s24_leg_ext_restored_20261023')) {
-      localStorage.setItem('s24_leg_ext_restored_20261023', '1');
+    if (!localStorage.getItem('s24_leg_press_restored_20261024')) {
+      localStorage.setItem('s24_leg_press_restored_20261024', '1');
       setTimeout(() => {
-        showToast('✓ 무릎펴기(레그익스텐션) 및 기존 919일 기록 복원 완료!');
+        showToast('✓ 다리로 밀기(레그프레스) 및 기존 805일 기록 복원 완료!');
       }, 350);
     }
     window.addEventListener('resize', () => {
