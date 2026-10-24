@@ -76,6 +76,7 @@
           appData.exercises = [...seedExercises, ...customExercises];
 
           if (!appData.days) appData.days = {};
+          const needLegPressTsvSync = !localStorage.getItem('s24_leg_press_tsv_applied_20261024c');
           for (const [d, val] of Object.entries(window.INITIAL_WORKOUT_DATA.days)) {
             if (!appData.days[d]) {
               appData.days[d] = JSON.parse(JSON.stringify(val));
@@ -88,10 +89,20 @@
                   }
                 }
               }
+              if (needLegPressTsvSync) {
+                if (val.r && val.r['leg_press_machine']) {
+                  appData.days[d].r['leg_press_machine'] = val.r['leg_press_machine'];
+                } else {
+                  delete appData.days[d].r['leg_press_machine'];
+                }
+              }
               if (appData.days[d].w === null || appData.days[d].w === undefined) {
                 appData.days[d].w = val.w;
               }
             }
+          }
+          if (needLegPressTsvSync) {
+            localStorage.setItem('s24_leg_press_tsv_applied_20261024c', '1');
           }
         }
         saveData();
@@ -316,7 +327,7 @@
         } else if (nums.length >= 2) {
           const wVal = nums[0];
           const cVal = nums[1];
-          if (exId === 'hip_abduction' && cVal >= 20) {
+          if ((exId === 'hip_abduction' || exId === 'leg_press_machine') && cVal >= 20) {
             items.push({ w: wVal, c: Math.round(cVal / 10), reps: cVal, tag });
           } else {
             items.push({ w: wVal, c: cVal, tag });
@@ -2261,10 +2272,10 @@
   window.addEventListener('DOMContentLoaded', () => {
     loadData();
     renderApp();
-    if (!localStorage.getItem('s24_both_press_restored_20261024b')) {
-      localStorage.setItem('s24_both_press_restored_20261024b', '1');
+    if (!localStorage.getItem('s24_leg_press_tsv_toast_20261024c')) {
+      localStorage.setItem('s24_leg_press_tsv_toast_20261024c', '1');
       setTimeout(() => {
-        showToast('✓ 누워서 밀기 & 다리로 밀기(레그프레스) 모두 반영 완료!');
+        showToast('✓ 다리로 밀기(레그프레스) 920일 전체 데이터 업데이트 완료!');
       }, 350);
     }
     window.addEventListener('resize', () => {
